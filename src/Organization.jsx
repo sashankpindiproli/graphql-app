@@ -4,7 +4,7 @@ import Repository from './Repository';
 class Organization extends Component {
     
     render () {
-        const { organization: { name, url }, errors, repository }= this.props
+        const { organization: { name, url, repository }, errors, onFetchMoreIssues, onRepositoryStar }= this.props
         if (errors) {
             return (
                 <p>
@@ -19,7 +19,11 @@ class Organization extends Component {
                     <strong> Issues from Organization: </strong>
                     <a href={ url }>{ name }</a>
                 </p>
-                <Repository {...repository} />
+                <Repository
+                    repository={ repository }
+                    onFetchMoreIssues={ onFetchMoreIssues }
+                    onRepositoryStar={ onRepositoryStar }
+                />
             </div >
         ); 
     }  

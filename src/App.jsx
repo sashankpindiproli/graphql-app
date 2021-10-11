@@ -17,24 +17,40 @@ class App extends Component
         this.state = {
             path: 'the-road-to-learn-react/the-road-to-learn-react',
             organization: null,
-            repository:null,
             errors:null
         }
     }
 
     resolveIssuesQuery = ( { data } ) => ({
         organization: data?.data?.organization,
-        repository: data?.data?.organization?.repository,
         errors: data?.errors
     })
     
-    onFetchFromGitHub = () =>
+    resolveViewerHasStarred = ( { data }) =>
+    {
+        const viewerHasStarred = data?.addStar?.starrable?.viewerHasStarred;
+        
+        return {
+            ...this.state,
+            organization: {
+                ...this.state.organization,
+                    repository:
+                {
+                        ...this.state.organization?.repository,
+                    stargazerCount:viewerHasStarred ? this.state.organization?.repository?.stargazerCount + 1 : this.state.organization?.repository?.stargazerCount - 1,
+                    viewerHasStarred
+                }
+            }
+        }
+    }
+    
+    onFetchFromGitHub = (cursor=null) =>
     {
         const { path } = this.state;
-        const [ organization, repository ] = path.split( '/' );
+        const [ organization, repositoryName ] = path.split( '/' );
         
         axiosGitHubGraphQL
-            .post( '', { query: GET_ISSUES_OF_REPOSITORY, variables: { organization, repository } } )
+            .post( '', { query: GET_ISSUES_OF_REPOSITORY, variables: { organization, repositoryName, cursor } } )
             .then( ( { data } ) =>
             {
                 this.setState(this.resolveIssuesQuery({data}));
@@ -56,9 +72,21 @@ class App extends Component
         this.onFetchFromGitHub();
     };
     
+    onFetchMoreIssues = () => {
+        const { organization } = this.state;
+        const endCursor = organization?.repository?.issues?.pageInfo?.endCursor;
+        this.onFetchFromGitHub( endCursor )
+    }
+
+    handleRepositoryCall = ( viewerHasStarred ) => viewerHasStarred ? REMOVE_STAR_FROM_REPOSITORY : ADD_STAR_TO_REPOSITORY;
+
+    onRepositoryStar = (id, viewerHasStarred) => {
+        axiosGitHubGraphQL
+            .post( '', { query: this.handleRepositoryCall(viewerHasStarred), variables: { repositoryId:id } } )
+            .then( ( { data }) => this.setState( this.resolveViewerHasStarred( data ) ));
+    }
     render () {
-        const { path, organization, errors,repository } = this.state;
-        
+        const { path, organization, errors } = this.state; 
         return (
             <div>
                 <h1>{ TITLE }</h1>
@@ -73,7 +101,8 @@ class App extends Component
                 {organization ?
                     <Organization
                         organization={ organization }
-                        repository={ repository }
+                        onFetchMoreIssues={ this.onFetchMoreIssues.bind( this ) }
+                        onRepositoryStar={ this.onRepositoryStar.bind(this) }
                         errors={ errors } /> :
                     <p> No Information yet.</p>
                 }
@@ -83,24 +112,61 @@ class App extends Component
 }
 
 const GET_ISSUES_OF_REPOSITORY = `
-query($organization: String!, $repository: String!) {
+query($organization: String!, $repositoryName: String!, $cursor: String) {
     organization(login: $organization) {
         name
         url
-        repository(name: $repository) {
+        repository(name: $repositoryName) {
+            id
             name
             url
-            issues(last: 5) {
+            viewerHasStarred
+            stargazerCount
+            issues(last: 5, after: $cursor, states: [OPEN]) {
                 edges {
                     node {
                         id
                         title
                         url
+                        reactions(last: 3) {
+                            edges {
+                                node {
+                                    id
+                                    content
+                                }
+                            }
+                        }
                     }
+                }
+                totalCount
+                pageInfo {
+                    endCursor
+                    hasNextPage
                 }
             }
         }
     }
 }`
+
+const ADD_STAR_TO_REPOSITORY = `
+    mutation($repositoryId: ID!) {
+        addStar(input: {starrableId: $repositoryId}) {
+            starrable {
+                viewerHasStarred
+            }
+        }
+    }
+`;
+
+
+const REMOVE_STAR_FROM_REPOSITORY = `
+    mutation($repositoryId: ID!) {
+        removeStar(input: {starrableId: $repositoryId}) {
+            starrable {
+                viewerHasStarred
+            }
+        }
+    }
+`;
 
 export default App;
